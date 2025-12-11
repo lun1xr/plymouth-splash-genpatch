@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+CONFPATH="/usr/share/mksplash/.conf"
+LASTSET="$(cat $CONFPATH)"
+
 sessions="$(/usr/bin/loginctl list-sessions --no-legend || true)"
 
 select_line=""
@@ -43,8 +46,10 @@ title=$(awk -F= '$1=="Theme"{print $2}' /etc/plymouth/plymouthd.conf)
 unpatch() {
   if [[ -f "$UNPATCHED_PATH" ]]; then
     mv "$UNPATCHED_PATH" "/usr/lib/plymouth/two-step.so"
+    echo "30" > $CONFPATH
     echo "Unpatched successfully"
   else
+    echo "30" > $CONFPATH
     echo "Patch not found (no backup at $UNPATCHED_PATH)"
   fi
 }
@@ -57,33 +62,38 @@ else
   exit 0
 fi
 
-if [[ "$fps" == "30" ]]; then
-  unpatch
-else
-  echo "Patching two-step to ${fps} fps..."
-
-  DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-  WORK_DIR=$WORKING_DIR
-  if [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]]; then
-    echo "Could not create temp dir"
-    exit 1
-  fi
-  sudo -u "$usr" bash -c "
-    set -euo pipefail
-    cd \"$WORK_DIR\"
-    git clone \"$PLYMOUTH_SOURCE\"
-    cd plymouth
-    # NOTE: Fix if Plymouth official removes line
-    sed -i \"s|logo=/usr/share/pixmaps/archlinux-logo.png|logo=/usr/share/pixmaps/archlinux-logo.png  -Dc_args='-DFRAMES_PER_SECOND=${fps}'|\" PKGBUILD
-    makepkg -s --noconfirm
-  "
-
-  if [[ -f "$UNPATCHED_PATH" ]]; then
-    rm /usr/lib/plymouth/two-step.so
+if ! [[ "$fps" == "$LASTSET" ]]; then
+  if [[ "$fps" == "30" ]]; then
+    unpatch
   else
-    mv /usr/lib/plymouth/two-step.so "$UNPATCHED_PATH"
+    echo "Patching two-step to ${fps} fps..."
+
+    DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+    WORK_DIR=$WORKING_DIR
+    if [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]]; then
+      echo "Could not create temp dir"
+      exit 1
+    fi
+    sudo -u "$usr" bash -c "
+      set -euo pipefail
+      cd \"$WORK_DIR\"
+      git clone \"$PLYMOUTH_SOURCE\"
+      cd plymouth
+      # NOTE: Fix if Plymouth official removes line
+      sed -i \"s|logo=/usr/share/pixmaps/archlinux-logo.png|logo=/usr/share/pixmaps/archlinux-logo.png  -Dc_args='-DFRAMES_PER_SECOND=${fps}'|\" PKGBUILD
+      makepkg -s --noconfirm
+    "
+
+    if [[ -f "$UNPATCHED_PATH" ]]; then
+      rm /usr/lib/plymouth/two-step.so
+    else
+      mv /usr/lib/plymouth/two-step.so "$UNPATCHED_PATH"
+    fi
+    echo "$fps" > $CONFPATH
   fi
+else
+  echo "Two-step already patched to ${fps} fps; skipping step"
 fi
 
 install -m 0755 $WORKING_DIR/plymouth/pkg/plymouth/usr/lib/plymouth/two-step.so /usr/lib/plymouth/two-step.so
