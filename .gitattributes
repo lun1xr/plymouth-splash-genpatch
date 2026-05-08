@@ -1,0 +1,2 @@
+*.path linguist-language=systemd
+*.service linguist-language=systemd
