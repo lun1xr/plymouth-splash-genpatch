@@ -1,2 +1,2 @@
-*.path linguist-language=systemd
-*.service linguist-language=systemd
+*.path linguist-language=INI
+*.service linguist-language=INI
